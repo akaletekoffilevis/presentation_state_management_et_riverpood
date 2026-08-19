@@ -4,8 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 // =============================================================================
 // DEMO 09 : Architecture 3 couches avec Riverpod
 // =============================================================================
-// TODO DEMO : Monte que chaque couche est indépendante et testable séparément
-// =============================================================================
 
 // =============================================================================
 // === COUCHE DATA ============================================================
@@ -25,8 +23,6 @@ class Task {
     this.completed = false,
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
-
-  // TODO DEMO : Monte la couche Data en montrant le FakeApiClient
 
   factory Task.fromJson(Map<String, dynamic> json) {
     return Task(
@@ -61,7 +57,7 @@ class Task {
   }
 }
 
-// --- Client API factice ---
+// --- Client API factice avec delays simulés ---
 
 class FakeApiClient {
   int _nextId = 4;
@@ -71,15 +67,22 @@ class FakeApiClient {
     Task(id: 3, title: 'Présenter l\'architecture', completed: false),
   ];
 
+  // Booléen pour simuler des erreurs API depuis l'UI
+  bool simulateError = false;
+
   Future<List<Task>> fetchTasks() async {
-    // TODO DEMO : Ajoute un delay plus long pour montrer le loading
     await Future.delayed(const Duration(seconds: 1));
+    if (simulateError) {
+      throw Exception('Erreur simulée : impossible de charger les tâches');
+    }
     return List.from(_tasks);
   }
 
   Future<Task> createTask(String title) async {
-    // TODO DEMO : Fais planter l'API pour montrer l'erreur et le retry
     await Future.delayed(const Duration(milliseconds: 500));
+    if (simulateError) {
+      throw Exception('Erreur simulée : impossible de créer la tâche');
+    }
     final task = Task(id: _nextId++, title: title);
     _tasks.add(task);
     return task;
@@ -87,12 +90,18 @@ class FakeApiClient {
 
   Future<bool> deleteTask(int id) async {
     await Future.delayed(const Duration(milliseconds: 500));
+    if (simulateError) {
+      throw Exception('Erreur simulée : impossible de supprimer la tâche');
+    }
     _tasks.removeWhere((t) => t.id == id);
     return true;
   }
 
   Future<Task> toggleTask(int id) async {
     await Future.delayed(const Duration(milliseconds: 500));
+    if (simulateError) {
+      throw Exception('Erreur simulée : impossible de modifier la tâche');
+    }
     final index = _tasks.indexWhere((t) => t.id == id);
     if (index == -1) throw Exception('Tâche non trouvée');
     _tasks[index] = _tasks[index].copyWith(
@@ -102,7 +111,7 @@ class FakeApiClient {
   }
 }
 
-// --- Repository ---
+// --- Repository : abstraction au-dessus du client API ---
 
 class TaskRepository {
   final FakeApiClient _apiClient;
@@ -133,6 +142,7 @@ final repositoryProvider = Provider<TaskRepository>((ref) {
 // === COUCHE DOMAIN / APPLICATION ============================================
 // =============================================================================
 
+// Notifier gérant l'état asynchrone de la liste de tâches
 class TodoListNotifier extends AsyncNotifier<List<Task>> {
   @override
   Future<List<Task>> build() async {
@@ -140,9 +150,9 @@ class TodoListNotifier extends AsyncNotifier<List<Task>> {
     return repository.getTasks();
   }
 
+  // Ajoute une tâche puis recharge la liste
   Future<void> addTask(String title) async {
     final repository = ref.watch(repositoryProvider);
-    // État de chargement optimiste
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
       await repository.addTask(title);
@@ -150,6 +160,7 @@ class TodoListNotifier extends AsyncNotifier<List<Task>> {
     });
   }
 
+  // Supprime une tâche puis recharge la liste
   Future<void> deleteTask(int id) async {
     final repository = ref.watch(repositoryProvider);
     state = const AsyncLoading();
@@ -159,6 +170,7 @@ class TodoListNotifier extends AsyncNotifier<List<Task>> {
     });
   }
 
+  // Inverse l'état completed d'une tâche puis recharge la liste
   Future<void> toggleTask(int id) async {
     final repository = ref.watch(repositoryProvider);
     state = const AsyncLoading();
@@ -168,6 +180,7 @@ class TodoListNotifier extends AsyncNotifier<List<Task>> {
     });
   }
 
+  // Force le rechargement via invalidation
   void refresh() {
     ref.invalidateSelf();
   }
@@ -182,13 +195,36 @@ final todoListProvider =
 // === COUCHE PRÉSENTATION ====================================================
 // =============================================================================
 
-class DemoArchitecture extends ConsumerWidget {
+class DemoArchitecture extends ConsumerStatefulWidget {
   const DemoArchitecture({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DemoArchitecture> createState() => _DemoArchitectureState();
+}
+
+class _DemoArchitectureState extends ConsumerState<DemoArchitecture> {
+  final TextEditingController _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  // Envoie une tâche via le notifier
+  void _submitTask() {
+    final text = _controller.text.trim();
+    if (text.isNotEmpty) {
+      ref.read(todoListProvider.notifier).addTask(text);
+      _controller.clear();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Accès au client API pour le bouton simulation d'erreur
+    final apiClient = ref.watch(apiClientProvider);
     final tasksAsync = ref.watch(todoListProvider);
-    final controller = TextEditingController();
 
     return Scaffold(
       appBar: AppBar(
@@ -203,48 +239,127 @@ class DemoArchitecture extends ConsumerWidget {
       ),
       body: Column(
         children: [
-          // --- Zone d'ajout de tâche ---
+          // --- Indicateur couche Data ---
+          Container(
+            width: double.infinity,
+            color: Colors.blue.shade100,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            child: const Text(
+              'COUCHE DATA — FakeApiClient, TaskRepository, Providers',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.blue,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          // --- Indicateur couche Domain ---
+          Container(
+            width: double.infinity,
+            color: Colors.green.shade100,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            child: const Text(
+              'COUCHE DOMAIN — TodoListNotifier (AsyncNotifier)',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.green,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          // --- Indicateur couche Presentation ---
+          Container(
+            width: double.infinity,
+            color: Colors.orange.shade100,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            child: const Text(
+              'COUCHE PRÉSENTATION — ConsumerWidget, AsyncValue.when',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.deepOrange,
+                fontSize: 12,
+              ),
+            ),
+          ),
+
+          const Divider(height: 1),
+
+          // --- Boutons d'action ---
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(12),
             child: Row(
               children: [
                 Expanded(
                   child: TextField(
-                    controller: controller,
+                    controller: _controller,
                     decoration: const InputDecoration(
                       labelText: 'Nouvelle tâche',
                       border: OutlineInputBorder(),
                     ),
-                    onSubmitted: (value) {
-                      if (value.trim().isNotEmpty) {
-                        ref.read(todoListProvider.notifier).addTask(
-                              value.trim(),
-                            );
-                        controller.clear();
-                      }
-                    },
+                    onSubmitted: (_) => _submitTask(),
                   ),
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton.icon(
-                  onPressed: () {
-                    if (controller.text.trim().isNotEmpty) {
-                      ref.read(todoListProvider.notifier).addTask(
-                            controller.text.trim(),
-                          );
-                      controller.clear();
-                    }
-                  },
+                  onPressed: _submitTask,
                   icon: const Icon(Icons.add),
                   label: const Text('Ajouter'),
                 ),
               ],
             ),
           ),
+          // Boutons de simulation
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      // Active/désactive la simulation d'erreur côté API
+                      apiClient.simulateError = !apiClient.simulateError;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            apiClient.simulateError
+                                ? 'Mode erreur activé — les prochaines requêtes vont échouer'
+                                : 'Mode erreur désactivé — les requêtes fonctionnent normalement',
+                          ),
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                    icon: Icon(
+                      apiClient.simulateError
+                          ? Icons.error
+                          : Icons.check_circle,
+                      color: apiClient.simulateError ? Colors.red : Colors.green,
+                    ),
+                    label: Text(
+                      apiClient.simulateError
+                          ? 'Désactiver erreur'
+                          : 'Simuler erreur API',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => ref.invalidate(todoListProvider),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Rafraîchir'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
           const Divider(height: 1),
+
           // --- Liste des tâches avec gestion AsyncValue ---
           Expanded(
             child: tasksAsync.when(
+              // Affichage pendant le chargement
               loading: () => const Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -255,32 +370,35 @@ class DemoArchitecture extends ConsumerWidget {
                   ],
                 ),
               ),
+              // Affichage en cas d'erreur
               error: (error, stack) => Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.error_outline,
-                      color: Colors.red,
-                      size: 48,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Erreur : $error',
-                      style: const TextStyle(color: Colors.red),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 16),
-                    // TODO DEMO : Monte le ref.invalidate pour le retry
-                    ElevatedButton.icon(
-                      onPressed: () =>
-                          ref.invalidate(todoListProvider),
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Réessayer'),
-                    ),
-                  ],
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.error_outline,
+                        color: Colors.red,
+                        size: 48,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Erreur : $error',
+                        style: const TextStyle(color: Colors.red),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: () => ref.invalidate(todoListProvider),
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Réessayer'),
+                      ),
+                    ],
+                  ),
                 ),
               ),
+              // Affichage de la liste de tâches
               data: (tasks) {
                 if (tasks.isEmpty) {
                   return const Center(
@@ -337,85 +455,3 @@ class DemoArchitecture extends ConsumerWidget {
     );
   }
 }
-
-// =============================================================================
-// TEST : Comment tester le Notifier
-// =============================================================================
-//
-// TODO DEMO : Ajoute un test unitaire en bas du fichier pour montrer la testabilité
-//
-// import 'package:flutter_test/flutter_test.dart';
-//
-// void main() {
-//   group('TodoListNotifier', () {
-//     test('build charge les tâches initiales', () async {
-//       final container = ProviderContainer(
-//         overrides: [
-//           apiClientProvider.overrideWithValue(FakeApiClient()),
-//         ],
-//       );
-//
-//       final tasks = await container.read(todoListProvider.future);
-//
-//       expect(tasks.length, 3);
-//       expect(tasks[0].title, 'Apprendre Riverpod');
-//       expect(tasks[0].completed, true);
-//
-//       container.dispose();
-//     });
-//
-//     test('addTask ajoute une tâche et rafraîchit la liste', () async {
-//       final container = ProviderContainer(
-//         overrides: [
-//           apiClientProvider.overrideWithValue(FakeApiClient()),
-//         ],
-//       );
-//
-//       // Attendre le chargement initial
-//       await container.read(todoListProvider.future);
-//
-//       // Ajouter une tâche
-//       await container.read(todoListProvider.notifier).addTask('Nouvelle tâche');
-//
-//       final tasks = container.read(todoListProvider).value;
-//       expect(tasks!.length, 4);
-//       expect(tasks.last.title, 'Nouvelle tâche');
-//
-//       container.dispose();
-//     });
-//
-//     test('deleteTask supprime une tâche', () async {
-//       final container = ProviderContainer(
-//         overrides: [
-//           apiClientProvider.overrideWithValue(FakeApiClient()),
-//         ],
-//       );
-//
-//       await container.read(todoListProvider.future);
-//       await container.read(todoListProvider.notifier).deleteTask(1);
-//
-//       final tasks = container.read(todoListProvider).value;
-//       expect(tasks!.length, 2);
-//       expect(tasks.any((t) => t.id == 1), false);
-//
-//       container.dispose();
-//     });
-//
-//     test('toggleTask inverse le statut completed', () async {
-//       final container = ProviderContainer(
-//         overrides: [
-//           apiClientProvider.overrideWithValue(FakeApiClient()),
-//         ],
-//       );
-//
-//       await container.read(todoListProvider.future);
-//       await container.read(todoListProvider.notifier).toggleTask(2);
-//
-//       final tasks = container.read(todoListProvider).value;
-//       final toggled = tasks!.firstWhere((t) => t.id == 2);
-//       expect(toggled.completed, true);
-//
-//       container.dispose();
-//     });
-//   });
-// }

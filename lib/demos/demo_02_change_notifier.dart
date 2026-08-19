@@ -5,47 +5,23 @@ import 'package:flutter/material.dart';
 // =============================================================================
 // DEMO 02 : ChangeNotifier + ListenableBuilder
 // =============================================================================
-// On utilise ChangeNotifier pour gérer l'état de notre liste de tâches
-// et ListenableBuilder pour reconstruire l'UI quand l'état change.
-// Pas de Provider ici — on écoute directement le ChangeNotifier.
-// =============================================================================
 
-// -----------------------------------------------------------------------------
-// Modèle : TodoModel
-// -----------------------------------------------------------------------------
-// Le modèle étend ChangeNotifier pour notifier les abonnés quand l'état change.
-// -----------------------------------------------------------------------------
-
-
-// TODO DEMO : Ajoute une propriété 'priority' au modèle pour montrer l'extension
-// (par exemple : int priority = 0; puis modifie add() pour l'accepter en paramètre)
-
+// Modèle de données qui notifie les abonnés quand l'état change
 class TodoModel extends ChangeNotifier {
-  // Liste interne des tâches (mutable en interne)
   final List<String> _tasks = [];
-
-  // Liste interne pour tracker les tâches complétées
   final List<bool> _completed = [];
 
-  // Getter non modifiable — empêche la modification directe depuis l'extérieur
   List<String> get tasks => List.unmodifiable(_tasks);
   List<bool> get completed => List.unmodifiable(_completed);
-
-  // Nombre total de tâches
   int get count => _tasks.length;
 
-  // Ajouter une tâche
   void add(String task) {
     if (task.trim().isEmpty) return;
     _tasks.add(task.trim());
-    _completed.add(false); // Nouvelle tâche = pas encore complétée
-
-    // TODO DEMO : Modifie notifyListeners() pour montrer que l'UI se met à jour
-    // Essaie de commenter la ligne suivante et observe que l'UI ne se met plus à jour
+    _completed.add(false);
     notifyListeners();
   }
 
-  // Supprimer une tâche par son index
   void remove(int index) {
     if (index < 0 || index >= _tasks.length) return;
     _tasks.removeAt(index);
@@ -53,7 +29,6 @@ class TodoModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Inverser l'état complété d'une tâche
   void toggle(int index) {
     if (index < 0 || index >= _tasks.length) return;
     _completed[index] = !_completed[index];
@@ -61,9 +36,6 @@ class TodoModel extends ChangeNotifier {
   }
 }
 
-// -----------------------------------------------------------------------------
-// Widget principal : DemoChangeNotifier
-// -----------------------------------------------------------------------------
 class DemoChangeNotifier extends StatefulWidget {
   const DemoChangeNotifier({super.key});
 
@@ -71,20 +43,12 @@ class DemoChangeNotifier extends StatefulWidget {
   State<DemoChangeNotifier> createState() => _DemoChangeNotifierState();
 }
 
-// -----------------------------------------------------------------------------
-// State : _DemoChangeNotifierState
-// -----------------------------------------------------------------------------
-// On crée le TodoModel dans initState et on le dispose proprement.
-// On utilise ListenableBuilder pour écouter les changements du modèle.
-// -----------------------------------------------------------------------------
-
-
-// TODO DEMO : Montre que sans ListenableBuilder, l'UI ne se met pas à jour
-// (remplace ListenableBuilder par un simple Column et montre que rien ne bouge)
-
 class _DemoChangeNotifierState extends State<DemoChangeNotifier> {
   late final TodoModel _todoModel;
   final TextEditingController _controller = TextEditingController();
+
+  int _rebuildCount = 0;
+  bool _useListenableBuilder = true;
 
   @override
   void initState() {
@@ -95,7 +59,7 @@ class _DemoChangeNotifierState extends State<DemoChangeNotifier> {
   @override
   void dispose() {
     _controller.dispose();
-    _todoModel.dispose(); // Important : libère les ressources du ChangeNotifier
+    _todoModel.dispose();
     super.dispose();
   }
 
@@ -107,6 +71,77 @@ class _DemoChangeNotifierState extends State<DemoChangeNotifier> {
     }
   }
 
+  void _incrementRebuild() {
+    setState(() {
+      _rebuildCount++;
+    });
+  }
+
+  // Couleur qui change à chaque rebuild
+  Color get _indicatorColor {
+    final colors = [
+      Colors.red,
+      Colors.blue,
+      Colors.green,
+      Colors.orange,
+      Colors.purple,
+      Colors.teal,
+      Colors.pink,
+      Colors.amber,
+    ];
+    return colors[_rebuildCount % colors.length];
+  }
+
+  Widget _buildTodoList() {
+    if (_todoModel.tasks.isEmpty) {
+      return Center(
+        child: Text(
+          'Aucune tâche pour le moment.\nAjoutez-en une !',
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                color: Colors.grey,
+              ),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: EdgeInsets.symmetric(horizontal: 16),
+      itemCount: _todoModel.tasks.length,
+      itemBuilder: (context, index) {
+        final task = _todoModel.tasks[index];
+        final isCompleted = _todoModel.completed[index];
+
+        return Card(
+          margin: EdgeInsets.only(bottom: 8),
+          child: ListTile(
+            leading: Checkbox(
+              value: isCompleted,
+              onChanged: (_) {
+                _todoModel.toggle(index);
+              },
+            ),
+            title: Text(
+              task,
+              style: TextStyle(
+                decoration: isCompleted
+                    ? TextDecoration.lineThrough
+                    : TextDecoration.none,
+                color: isCompleted ? Colors.grey : null,
+              ),
+            ),
+            trailing: IconButton(
+              icon: Icon(Icons.delete, color: Colors.red),
+              onPressed: () {
+                _todoModel.remove(index);
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -116,23 +151,68 @@ class _DemoChangeNotifierState extends State<DemoChangeNotifier> {
       ),
       body: Column(
         children: [
-          // ---- Compteur en haut ----
-          // TODO DEMO : Ajoute un troisième état "en cours de traitement"
-          // pour montrer comment le compteur peut refléter plus d'informations
+          // Panneau de contrôle
           Padding(
             padding: const EdgeInsets.all(16.0),
-            child: ListenableBuilder(
-              listenable: _todoModel,
-              builder: (context, child) {
-                return Text(
-                  'Nombre de tâches : ${_todoModel.count}',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                );
-              },
+            child: Column(
+              children: [
+                // Compteur de rebuilds
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 16,
+                      height: 16,
+                      decoration: BoxDecoration(
+                        color: _indicatorColor,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      'Rebuilds : $_rebuildCount',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 8),
+                // Toggle sans ListenableBuilder
+                SwitchListTile(
+                  title: Text('Sans ListenableBuilder'),
+                  subtitle: Text(
+                    _useListenableBuilder
+                        ? 'ListenableBuilder actif — l\'UI se met à jour'
+                        : 'PAS de ListenableBuilder — l\'UI ne bouge pas !',
+                    style: TextStyle(
+                      color: _useListenableBuilder ? Colors.green : Colors.red,
+                    ),
+                  ),
+                  value: !_useListenableBuilder,
+                  onChanged: (value) {
+                    setState(() {
+                      _useListenableBuilder = !value;
+                      _rebuildCount = 0;
+                    });
+                  },
+                ),
+                // Bouton reset
+                TextButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _rebuildCount = 0;
+                    });
+                  },
+                  icon: Icon(Icons.refresh),
+                  label: Text('Reset compteur'),
+                ),
+                Divider(),
+              ],
             ),
           ),
 
-          // ---- Zone de saisie ----
+          // Zone de saisie
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: Row(
@@ -160,65 +240,17 @@ class _DemoChangeNotifierState extends State<DemoChangeNotifier> {
 
           SizedBox(height: 16),
 
-          // ---- Liste des tâches ----
+          // Liste des tâches — avec ou sans ListenableBuilder
           Expanded(
-            child: ListenableBuilder(
-              listenable: _todoModel,
-              builder: (context, child) {
-                // Si la liste est vide, afficher un message
-                if (_todoModel.tasks.isEmpty) {
-                  return Center(
-                    child: Text(
-                      'Aucune tâche pour le moment.\nAjoutez-en une !',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                            color: Colors.grey,
-                          ),
-                    ),
-                  );
-                }
-
-                // Sinon, afficher la liste avec ListView.builder
-                return ListView.builder(
-                  padding: EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: _todoModel.tasks.length,
-                  itemBuilder: (context, index) {
-                    final task = _todoModel.tasks[index];
-                    final isCompleted = _todoModel.completed[index];
-
-                    return Card(
-                      margin: EdgeInsets.only(bottom: 8),
-                      child: ListTile(
-                        // Checkbox pour marquer comme complété
-                        leading: Checkbox(
-                          value: isCompleted,
-                          onChanged: (_) {
-                            _todoModel.toggle(index);
-                          },
-                        ),
-                        // Texte de la tâche
-                        title: Text(
-                          task,
-                          style: TextStyle(
-                            decoration: isCompleted
-                                ? TextDecoration.lineThrough
-                                : TextDecoration.none,
-                            color: isCompleted ? Colors.grey : null,
-                          ),
-                        ),
-                        // Bouton de suppression
-                        trailing: IconButton(
-                          icon: Icon(Icons.delete, color: Colors.red),
-                          onPressed: () {
-                            _todoModel.remove(index);
-                          },
-                        ),
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
+            child: _useListenableBuilder
+                ? ListenableBuilder(
+                    listenable: _todoModel,
+                    builder: (context, child) {
+                      _incrementRebuild();
+                      return _buildTodoList();
+                    },
+                  )
+                : _buildTodoList(),
           ),
         ],
       ),

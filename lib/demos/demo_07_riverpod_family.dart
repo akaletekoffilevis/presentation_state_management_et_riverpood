@@ -63,9 +63,7 @@ final fakeTaskDataSource = <int, Map<String, dynamic>>{
 };
 
 // ── FutureProvider.family : récupère une tâche par son ID ─────────────
-// Le provider prend un entier (l'ID) et retourne un Future<Task>.
 // family crée un provider distinct pour chaque ID demandé.
-// TODO DEMO : Ouvre 2 tâches différentes et montre que family crée 2 providers séparés
 final taskByIdProvider = FutureProvider.family<Task, int>((ref, taskId) async {
   // Simulation d'un délai réseau
   await Future.delayed(const Duration(milliseconds: 800));
@@ -83,21 +81,30 @@ final taskByIdProvider = FutureProvider.family<Task, int>((ref, taskId) async {
   );
 });
 
-// TODO DEMO : Modifie autoDispose et montre que le cache est vidé en quittant l'écran
-// StateProvider avec autoDispose : la requête de recherche est écartée
+// ── StateProvider.autoDispose : la requête de recherche est écartée ────
 // quand l'écran n'est plus visible (mémoire libérée automatiquement).
 final searchQueryProvider = StateProvider.autoDispose<String>((ref) => '');
+
+// ── Track du provider family actif pour l'indicateur ──────────────────
+// Map qui surveille quels providers family sont encore en vie
+final activeFamilyProviders = Provider<Map<int, bool>>((ref) {
+  // Cette map sera mise à jour par les écrans qui utilisent family
+  return {};
+});
 
 // ── Écran principal ──────────────────────────────────────────────────
 class DemoRiverpodFamily extends ConsumerStatefulWidget {
   const DemoRiverpodFamily({super.key});
 
   @override
-  ConsumerState<DemoRiverpodFamily> createState() => _DemoRiverpodFamilyState();
+  ConsumerState<DemoRiverpodFamily> createState() =>
+      _DemoRiverpodFamilyState();
 }
 
 class _DemoRiverpodFamilyState extends ConsumerState<DemoRiverpodFamily> {
   final TextEditingController _searchController = TextEditingController();
+  // IDs des tâches actuellement consultées (pour l'indicateur)
+  final Set<int> _activeTaskIds = {};
 
   @override
   void dispose() {
@@ -125,9 +132,50 @@ class _DemoRiverpodFamilyState extends ConsumerState<DemoRiverpodFamily> {
       appBar: AppBar(
         title: const Text('Riverpod family + autoDispose'),
         centerTitle: true,
+        actions: [
+          // Bouton pour vider le cache de tous les providers family
+          IconButton(
+            icon: const Icon(Icons.delete_sweep),
+            tooltip: 'Vider le cache',
+            onPressed: () {
+              // Invalide tous les providers family actifs
+              for (final id in _activeTaskIds) {
+                ref.invalidate(taskByIdProvider(id));
+              }
+              setState(() => _activeTaskIds.clear());
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Cache vidé pour tous les providers family'),
+                  duration: Duration(seconds: 1),
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: Column(
         children: [
+          // ── Indicateur autoDispose actif ───────────────────────────
+          if (_activeTaskIds.isNotEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              color: Colors.green.shade50,
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.green.shade700, size: 18),
+                  const SizedBox(width: 8),
+                  Text(
+                    'autoDispose actif — ${_activeTaskIds.length} provider(s) family en vie',
+                    style: TextStyle(
+                      color: Colors.green.shade800,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
           // ── Champ de recherche ────────────────────────────────────
           Padding(
             padding: const EdgeInsets.all(12),
@@ -139,7 +187,6 @@ class _DemoRiverpodFamilyState extends ConsumerState<DemoRiverpodFamily> {
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
-                // Bouton pour effacer le texte
                 suffixIcon: searchQuery.isNotEmpty
                     ? IconButton(
                         icon: const Icon(Icons.clear),
@@ -151,11 +198,37 @@ class _DemoRiverpodFamilyState extends ConsumerState<DemoRiverpodFamily> {
                     : null,
               ),
               onChanged: (value) {
-                // Met à jour le StateProvider autoDispose
                 ref.read(searchQueryProvider.notifier).state = value;
               },
             ),
           ),
+
+          // ── Bouton vider le cache (variant détaillée) ─────────────
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _activeTaskIds.isEmpty
+                    ? null
+                    : () {
+                        for (final id in _activeTaskIds) {
+                          ref.invalidate(taskByIdProvider(id));
+                        }
+                        setState(() => _activeTaskIds.clear());
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Cache vidé ! Les providers se rechargeront.'),
+                            duration: Duration(seconds: 1),
+                          ),
+                        );
+                      },
+                icon: const Icon(Icons.cleaning_services),
+                label: const Text('Vider le cache'),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
 
           // ── Liste des tâches filtrées ─────────────────────────────
           Expanded(
@@ -172,6 +245,7 @@ class _DemoRiverpodFamilyState extends ConsumerState<DemoRiverpodFamily> {
                       final entry = filteredTasks[index];
                       final taskId = entry.key;
                       final title = entry.value['title'] as String;
+                      final completed = entry.value['completed'] as bool;
 
                       return Card(
                         margin: const EdgeInsets.symmetric(
@@ -180,21 +254,34 @@ class _DemoRiverpodFamilyState extends ConsumerState<DemoRiverpodFamily> {
                         ),
                         child: ListTile(
                           leading: CircleAvatar(
-                            child: Text('$taskId'),
+                            backgroundColor:
+                                completed ? Colors.green : Colors.orange,
+                            child: Text(
+                              '$taskId',
+                              style: const TextStyle(color: Colors.white),
+                            ),
                           ),
                           title: Text(title),
                           trailing: const Icon(Icons.chevron_right),
-                          onTap: () {
+                          onTap: () async {
+                            // Enregistre l'ID comme actif
+                            setState(() => _activeTaskIds.add(taskId));
+
                             // Navigation vers l'écran de détail
-                            // La family provider créera un provider dédié
-                            // pour cet ID précis
-                            Navigator.push(
+                            await Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (_) =>
-                                    TaskDetailScreen(taskId: taskId),
+                                builder: (_) => TaskDetailScreen(
+                                  taskId: taskId,
+                                  onDispose: () {
+                                    setState(() => _activeTaskIds.remove(taskId));
+                                  },
+                                ),
                               ),
                             );
+
+                            // Quand on revient, si le provider a été invalidé,
+                            // il sera rechargé automatiquement
                           },
                         ),
                       );
@@ -210,22 +297,37 @@ class _DemoRiverpodFamilyState extends ConsumerState<DemoRiverpodFamily> {
 // ── Écran de détail d'une tâche ──────────────────────────────────────
 // Utilise FutureProvider.family<Task, int> avec l'ID de la tâche.
 // Chaque tâche ouverte reçoit son propre provider (grâce à family).
-// TODO DEMO : Ajoute keepAlive pour garder les données en cache 30 secondes
 class TaskDetailScreen extends ConsumerWidget {
   final int taskId;
+  final VoidCallback? onDispose;
 
-  const TaskDetailScreen({super.key, required this.taskId});
+  const TaskDetailScreen({super.key, required this.taskId, this.onDispose});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // futureProvider.family : on passe taskId → le provider retourne un AsyncValue<Task>
-    // TODO DEMO : Modifie le paramètre de family et montre le rechargement
     final taskAsync = ref.watch(taskByIdProvider(taskId));
 
     return Scaffold(
       appBar: AppBar(
         title: Text('Tâche #$taskId'),
         centerTitle: true,
+        actions: [
+          // Bouton pour vider le cache de ce provider family spécifique
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Vider le cache de cette tâche',
+            onPressed: () {
+              ref.invalidate(taskByIdProvider(taskId));
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Cache vidé pour la tâche #$taskId'),
+                  duration: const Duration(seconds: 1),
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: taskAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),

@@ -16,7 +16,6 @@ class Task {
     this.completed = false,
   });
 
-  // Copie avec modification partielle
   Task copyWith({int? id, String? title, bool? completed}) {
     return Task(
       id: id ?? this.id,
@@ -30,14 +29,11 @@ class Task {
 // Notifier — logique métier CRUD
 // ──────────────────────────────────────────────────────────────────────────────
 
-// TODO DEMO : Ajoute une méthode 'reorder' au Notifier pour réorganiser les tâches
 class TodoNotifier extends Notifier<List<Task>> {
-  // Compteur d'auto-incrémentation pour les IDs
   int _nextId = 1;
 
   @override
   List<Task> build() {
-    // État initial : liste vide
     return [];
   }
 
@@ -63,7 +59,6 @@ class TodoNotifier extends Notifier<List<Task>> {
   }
 
   // Modifier le titre d'une tâche
-  // TODO DEMO : Ajoute un champ 'priority' au Task et modifie le Notifier
   void edit(int id, String newTitle) {
     state = [
       for (final task in state)
@@ -76,8 +71,6 @@ class TodoNotifier extends Notifier<List<Task>> {
     state = state.where((task) => !task.completed).toList();
   }
 }
-
-// TODO DEMO : Monte que le Notifier est testable sans contexte Flutter
 
 // Provider global du Notifier
 final todoProvider = NotifierProvider<TodoNotifier, List<Task>>(TodoNotifier.new);
@@ -94,7 +87,6 @@ class DemoNotifier extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Réactivité via ref.watch
     final tasks = ref.watch(todoProvider);
     final filter = ref.watch(filterProvider);
 
@@ -110,7 +102,6 @@ class DemoNotifier extends ConsumerWidget {
       }
     }).toList();
 
-    // Statistiques
     final activeCount = tasks.where((t) => !t.completed).length;
     final completedCount = tasks.where((t) => t.completed).length;
 
@@ -121,14 +112,14 @@ class DemoNotifier extends ConsumerWidget {
       ),
       body: Column(
         children: [
-          // ── Champ de saisie + bouton Ajouter ──
+          // Champ de saisie + bouton Ajouter
           _AddTaskRow(
             onAdd: (title) {
               ref.read(todoProvider.notifier).add(title);
             },
           ),
 
-          // ── Filtres ──
+          // Filtres
           _FilterRow(
             currentFilter: filter,
             onFilterChanged: (value) {
@@ -136,7 +127,7 @@ class DemoNotifier extends ConsumerWidget {
             },
           ),
 
-          // ── Liste des tâches ──
+          // Liste des tâches
           Expanded(
             child: filteredTasks.isEmpty
                 ? const Center(
@@ -165,7 +156,7 @@ class DemoNotifier extends ConsumerWidget {
                   ),
           ),
 
-          // ── Statistiques ──
+          // Statistiques
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Text(
@@ -174,7 +165,7 @@ class DemoNotifier extends ConsumerWidget {
             ),
           ),
 
-          // ── Bouton Supprimer les terminées ──
+          // Bouton Supprimer les terminées
           Padding(
             padding: const EdgeInsets.only(bottom: 16),
             child: ElevatedButton.icon(
@@ -191,8 +182,6 @@ class DemoNotifier extends ConsumerWidget {
               ),
             ),
           ),
-
-          // TODO DEMO : Ajoute un 'undo' avec ref.invalidateSelf()
         ],
       ),
     );
