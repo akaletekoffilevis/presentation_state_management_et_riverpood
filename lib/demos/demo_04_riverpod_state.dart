@@ -24,10 +24,6 @@ class DemoRiverpodState extends ConsumerWidget {
     final tasks = ref.watch(tasksProvider);
     final filter = ref.watch(filterProvider);
 
-    // TODO DEMO : Monte que ref.read dans build ne déclenche pas de rebuild
-    final currentFilter = ref.read(filterProvider);
-    debugPrint('Filtre actuel (read) : $currentFilter');
-
     final filteredTasks = tasks.where((task) {
       switch (filter) {
         case TaskFilter.all:

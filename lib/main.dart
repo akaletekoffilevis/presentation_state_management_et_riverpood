@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // Import des 9 écrans de démo
 import 'demos/demo_01_setstate.dart';
@@ -12,7 +13,11 @@ import 'demos/demo_08_notifier.dart';
 import 'demos/demo_09_architecture.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(
+    const ProviderScope(
+      child: MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {

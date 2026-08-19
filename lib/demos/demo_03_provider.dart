@@ -197,8 +197,6 @@ class _DemoProviderView extends StatelessWidget {
               builder: (context, model, child) {
                 // TODO DEMO : Retire le Consumer et utilise context.watch
                 // pour montrer que tout se reconstruit
-                debugPrint('Consumer rebuild - ${model.count} tâches');
-
                 if (model.todos.isEmpty) {
                   return child!;
                 }
@@ -286,8 +284,6 @@ class _SelectCountWidget extends StatelessWidget {
     // select() prend une fonction qui extrait la valeur voulue
     // rebuild QUE si cette valeur spécifique change
     final count = context.select<TodoModel, int>((model) => model.count);
-
-    debugPrint('Select rebuild - count = $count');
 
     return Container(
       padding: const EdgeInsets.all(12),
