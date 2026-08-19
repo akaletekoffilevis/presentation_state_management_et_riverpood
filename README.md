@@ -1,8 +1,6 @@
 # State Management en Flutter — Du setState à Riverpod
 
-## Cours interactif avec démos live
-
-Bienvenue dans ce cours ! Ici, tu vas apprendre à gérer l'état (le "state") dans tes applications Flutter. On commence de zéro avec `setState`, puis on avance étape par étape jusqu'à maîtriser Riverpod. Pas besoin d'avoir déjà codé en Flutter — même avec juste un peu de HTML, tu peux suivre. Chaque chapitre est clair, concis, et accompagné de démos que tu peux lancer directement sur ton ordinateur.
+Bienvenue dans ce cours ! Ici, tu vas apprendre à gérer l'état (le "state") dans tes applications Flutter. On commence de zéro avec `setState`, puis on avance étape par étape jusqu'à maîtriser Riverpod. 
 
 ---
 
@@ -31,18 +29,6 @@ Le dossier `lib/demos/` contient 9 démos prêtes à être lancées. Chaque dém
 | Démo 7 | Riverpod `family` + `autoDispose` |
 | Démo 8 | `NotifierProvider` |
 | Démo 9 | Architecture complète |
-
----
-
-## Comment utiliser ce cours
-
-1. **Suivre les fichiers dans l'ordre** — Le cours va du plus simple au plus avancé. Commence par le chapitre 1 et avance étape par étape.
-2. **Cocher les chapitres terminés** — Chaque chapitre contient des cases à cocher. Coche-les au fur et à mesure pour suivre ta progression.
-3. **Lancer les démos** — Les démos se trouvent dans `lib/demos/`. Pour en lancer une, utilise la commande suivante :
-   ```
-   flutter run
-   ```
-   Tu pourras ensuite choisir quelle démo exécuter depuis l'interface.
 
 ---
 
