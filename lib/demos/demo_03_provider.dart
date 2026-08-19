@@ -11,7 +11,7 @@ import 'package:provider/provider.dart';
 //   - context.select() → écouter un seul champ de l'état
 // ============================================================
 
-// --- Model & ChangeNotifier (même structure que demo_02) ---
+// --- Model & ChangeNotifier ---
 class TodoModel extends ChangeNotifier {
   final List<String> _todos = [];
 
@@ -21,7 +21,7 @@ class TodoModel extends ChangeNotifier {
   void add(String todo) {
     if (todo.trim().isEmpty) return;
     _todos.add(todo.trim());
-    notifyListeners(); // Notifie tous les auditeurs
+    notifyListeners();
   }
 
   void remove(int index) {
@@ -31,7 +31,6 @@ class TodoModel extends ChangeNotifier {
   }
 
   void toggle(int index) {
-    // Pour un vrai projet on ferait mieux, mais ici c'est une démo rapide
     _todos[index] =
         _todos[index].startsWith('✅ ') ? _todos[index].substring(2) : '✅ ${_todos[index]}';
     notifyListeners();
@@ -57,30 +56,26 @@ class _DemoProviderState extends State<DemoProvider> {
 
   @override
   Widget build(BuildContext context) {
-    // ChangeNotifierProvider crée et fournit l'instance de TodoModel
-    // À la destruction de l'arbre, le ChangeNotifier sera automatiquement disposé
     return ChangeNotifierProvider(
       create: (_) => TodoModel(),
-      child: const _DemoProviderView(),
+      child: _DemoProviderView(controller: _controller),
     );
   }
 }
 
 class _DemoProviderView extends StatelessWidget {
-  const _DemoProviderView();
+  final TextEditingController controller;
+
+  const _DemoProviderView({required this.controller});
 
   @override
   Widget build(BuildContext context) {
     // ============================================================
     // context.watch<T>() : Rebuild CE widget à chaque notifyListeners()
-    // Utile quand le widget a besoin de la valeur à chaque rebuild
     // ============================================================
     final count = context.watch<TodoModel>().count;
 
     return Scaffold(
-      // ----------------------------------------------------------
-      // AppBar statique (pas de Consumer ici pour garder la démo claire)
-      // ----------------------------------------------------------
       appBar: AppBar(
         title: Text('Provider - Todo ($count)'),
         backgroundColor: Colors.indigo,
@@ -113,7 +108,6 @@ class _DemoProviderView extends StatelessWidget {
                 const Divider(),
                 // ============================================================
                 // Section select : n'écouter qu'UN SEUL champ
-                // context.select() ne rebuild QUE quand la valeur sélectionnée change
                 // ============================================================
                 _SelectCountWidget(),
               ],
@@ -139,7 +133,7 @@ class _DemoProviderView extends StatelessWidget {
                   children: [
                     Expanded(
                       child: TextField(
-                        controller: context.read<_DemoProviderState>()._controller,
+                        controller: controller,
                         decoration: InputDecoration(
                           hintText: 'Ajouter une tâche...',
                           border: const OutlineInputBorder(),
@@ -148,25 +142,22 @@ class _DemoProviderView extends StatelessWidget {
                           suffixIcon: IconButton(
                             icon: const Icon(Icons.clear),
                             onPressed: () {
-                              // TODO DEMO : Change context.read en context.watch dans le bouton pour montrer la différence
-                              // Avec read : pas de rebuild du champ texte
-                              // Avec watch : le champ se reconstruit à chaque lettre
-                              context.read<_DemoProviderState>()._controller.clear();
+                              // TODO DEMO : Change context.read en context.watch
+                              // pour montrer la différence
+                              controller.clear();
                             },
                           ),
                         ),
-                        // TODO DEMO : Ajoute un Consumer autour du TextField pour montrer le rebuild inutile
-                        // Consumer<TodoModel> rebuild le TextField à chaque changement de la liste → pas idéal ici
                       ),
                     ),
                     const SizedBox(width: 8),
                     ElevatedButton.icon(
                       onPressed: () {
-                        // context.read() : accès direct SANS s'abonner aux changements
-                        // Idéal pour les actions (clics, callbacks) où on veut juste "fire and forget"
-                        final controller = context.read<_DemoProviderState>()._controller;
+                        // TODO DEMO : Ajoute un Consumer autour du TextField
+                        // pour montrer le rebuild inutile
                         final todoText = controller.text;
                         if (todoText.isNotEmpty) {
+                          // context.read() : accès direct SANS s'abonner aux changements
                           context.read<TodoModel>().add(todoText);
                           controller.clear();
                         }
@@ -200,17 +191,16 @@ class _DemoProviderView extends StatelessWidget {
             ),
           ),
 
-          // Consumer<TodoModel> : rebuild UNIQUEMENT ce sous-arbre quand le modèle change
-          // Le reste de l'arbre (AppBar, Counter, Ajout) n'est PAS impacté
+          // Consumer<TodoModel> : rebuild UNIQUEMENT ce sous-arbre
           Expanded(
             child: Consumer<TodoModel>(
               builder: (context, model, child) {
-                // TODO DEMO : Retire le Consumer et montre que tout se reconstruit
-                // Si on utilise context.watch ici à la place, tout le widget rebuild
-                debugPrint('🔄 Consumer rebuild - ${model.count} tâches');
+                // TODO DEMO : Retire le Consumer et utilise context.watch
+                // pour montrer que tout se reconstruit
+                debugPrint('Consumer rebuild - ${model.count} tâches');
 
                 if (model.todos.isEmpty) {
-                  return child!; // child = widget statique passé en 3ème paramètre
+                  return child!;
                 }
 
                 return ListView.builder(
@@ -239,7 +229,6 @@ class _DemoProviderView extends StatelessWidget {
                   },
                 );
               },
-              // child : widget statique qui ne rebuild PAS (optimisation)
               child: const Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -261,7 +250,7 @@ class _DemoProviderView extends StatelessWidget {
           ),
 
           // ============================================================
-          // Footer avec résumé : la Difference read vs watch vs Consumer vs select
+          // Footer : Résumé read vs watch vs Consumer vs select
           // ============================================================
           Container(
             width: double.infinity,
@@ -290,8 +279,6 @@ class _DemoProviderView extends StatelessWidget {
 
 // ============================================================
 // Widget démontrant context.select()
-// context.select<R>(): rebuild SEULEMENT si la valeur retournée change
-// Utile quand on veut écouter UN SEUL champ d'un gros model
 // ============================================================
 class _SelectCountWidget extends StatelessWidget {
   @override
@@ -300,7 +287,7 @@ class _SelectCountWidget extends StatelessWidget {
     // rebuild QUE si cette valeur spécifique change
     final count = context.select<TodoModel, int>((model) => model.count);
 
-    debugPrint('🔍 Select rebuild - count = $count');
+    debugPrint('Select rebuild - count = $count');
 
     return Container(
       padding: const EdgeInsets.all(12),
